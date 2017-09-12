@@ -1,0 +1,136 @@
+/*What are our top 3 sales by sale total (single table)*/
+SELECT *
+From Sale
+ORDER BY STotal DESC
+
+
+
+/*How many Customers have an employment history vs don't have an employment history?(multiple table)*/
+SELECT *
+FROM Customer LEFT JOIN CustomerEmployment ON Customer.CID = CustomerEmployment.CID
+
+
+
+/*Simulate if you gave customers $100 credit (Calculation)*/
+SELECT CFirstName, CLastName, CBRemainingBalance - 100 AS PossibleRemainingBalance
+FROM Customer JOIN CustomerBalance ON Customer.CID = CustomerBalance.CID
+
+
+
+
+
+/*How Much Total has the company financed overall? (Aggregate)*/
+SELECT SUM(SFinancedAmount) AS OverallFinanced
+FROM Sale
+
+
+
+/*How Much Total has the company financed overall per Zip code? (Aggregate)*/
+SELECT SUM(SFinancedAmount) AS OverallFinanced, ZipCode
+FROM Sale JOIN Customer ON Sale.CID = Customer.CID
+Group BY ZipCode
+Order BY OverallFinanced DESC
+
+
+
+/*Table with all customers/cosigners so they can contact with maintenance deals (Union)*/
+SELECT CFirstName AS FirstName, CLastName AS LastName, CPhone AS Phone, CAddress AS Address, ZipCode
+FROM Customer
+UNION
+SELECT COFirstName AS FirstName, COLastName AS LastName, COPhone AS Phone, COAddress AS Address, ZipCode
+FROM CoSigner
+
+
+
+
+
+
+
+
+
+/*Find all customers that paid in all cash(Subquery)*/
+Select CFirstName, CLastName, CPhone, CAddress
+FROM Customer
+WHERE CID IN 
+	(SELECT CID
+	FROM Sale
+	WHERE SFinancedAmount = 0)
+
+
+
+/* CREATE CustomerBalance and Payment Copies for Accountants/Finance to Use For Simulated Payments*/
+SELECT *
+INTO CustomerBalanceCopy
+FROM CustomerBalance
+
+SELECT *
+INTO PaymentCopy
+FROM Payment
+
+
+
+/*Adds a payment(Insert)*/
+INSERT INTO PaymentCopy
+VALUES (100, '4/15/15', 'Vehicle', 100, 1);
+
+
+
+/*(Update)*/
+-- Add a $20 credit to customers that financed over $5000 --
+UPDATE CustomerBalanceCopy
+SET CBRemainingBalance = CBRemainingBalance - 20
+WHERE CBTotalDue > 5000
+
+
+
+/*(Delete)*/
+-- Delete Balances that are at 0 --
+DELETE CustomerBalanceCopy
+WHERE CBTotalDue IS NULL OR CBTotalDue = 0
+
+
+
+
+/* 2 Views */
+--Create Views For Mechanics 1 for unrepaired and 1 for repaired--
+CREATE VIEW Waiting_Repairs AS
+SELECT VehicleProblem.VIN, VPID, VPDescription VPEstCost, VPActualCost, VMake, VModel, VYear
+FROM VehicleProblem JOIN Vehicle ON VehicleProblem.VIN = Vehicle.VIN
+WHERE VPActualCost  = 0
+
+CREATE VIEW Finished_Repairs AS
+SELECT VehicleProblem.VIN, VPID, VPDescription VPEstCost, VPActualCost, VMake, VModel, VYear
+FROM VehicleProblem JOIN Vehicle ON VehicleProblem.VIN = Vehicle.VIN
+WHERE VPActualCost > 0
+
+
+
+
+
+
+/* Stored Procedure */ -- Updates CustomerBalanceCopy/PaymentCopy to test simulated payments
+CREATE PROCEDURE SimulatePayments AS 
+SELECT CID, CBRemainingBalance AS OriginalBalance, PAYAmountPaid, CBRemainingBalance - PAYAmountPaid AS PossibleBalance
+FROM CustomerBalanceCopy JOIN PaymentCopy ON CustomerBalanceCopy.CBID = PaymentCopy.CBID
+
+
+
+
+
+
+/* Trigger */ -- Alerts user when a payment was successful and will display the record if the remaining balance is 0, or car is paid off															
+CREATE TRIGGER RemovePaidBalances ON CustomerBalance
+AFTER UPDATE
+AS	PRINT 'Payment Successful!';
+	Select *
+	FROM CustomerBalance
+	WHERE CBRemainingBalance = 0;
+
+
+
+
+/* See how many days each car is on the lot */
+SELECT VIN, PDate, SDate, DATEDIFF(day, PDate, SDate) AS DaysOnLot
+FROM Purchase JOIN Employee ON Purchase.EID = Employee.EID
+			  JOIN Sale ON Sale.EID = Employee.EID
+			  JOIN Vehicle ON Vehicle.SID = Sale.SID
